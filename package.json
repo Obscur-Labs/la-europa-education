@@ -1,0 +1,42 @@
+{
+  "name": "studycrm",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "crm",
+    "student"
+  ],
+  "scripts": {
+    "dev": "concurrently -n backend,crm,student -c blue,green,magenta \"npm:dev:backend\" \"npm:dev:crm\" \"npm:dev:student\"",
+    "dev:backend": "npm run dev -w backend",
+    "dev:crm": "npm run dev -w crm",
+    "dev:student": "npm run dev -w student",
+
+    "build": "npm run build:backend && npm run build:crm && npm run build:student",
+    "build:backend": "npm run build -w backend",
+    "build:crm": "npm run build -w crm",
+    "build:student": "npm run build -w student",
+
+    "start": "concurrently -n backend,crm,student -c blue,green,magenta \"npm:start:backend\" \"npm:start:crm\" \"npm:start:student\"",
+    "start:backend": "npm run start -w backend",
+    "start:crm": "npm run start -w crm",
+    "start:student": "npm run start -w student",
+
+    "seed": "npm run seed -w backend",
+
+    "typecheck": "npm run typecheck:backend && npm run typecheck:crm && npm run typecheck:student",
+    "typecheck:backend": "tsc --noEmit -p backend",
+    "typecheck:crm": "tsc --noEmit -p crm",
+    "typecheck:student": "tsc --noEmit -p student",
+
+    "clean": "rimraf node_modules backend/node_modules crm/node_modules student/node_modules backend/dist crm/.next student/.next"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "rimraf": "^6.0.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -12,34 +12,39 @@ StudyCRM is a study-abroad management platform with three separate sub-projects:
 
 ## Commands
 
-Each sub-project must be run from its own directory.
+This is an **npm workspaces monorepo**. Run everything from the repo root — there is a
+single root `node_modules` and a single root `package-lock.json`. Do not run `npm install`
+inside `backend/`, `crm/`, or `student/`; that would recreate the per-app `node_modules`
+this layout exists to avoid.
 
-### Backend
 ```bash
-cd backend
-npm run dev       # ts-node with nodemon (hot reload)
-npm run build     # tsc → dist/
-npm start         # node dist/index.js
-npm run seed      # seed initial data via ts-node src/seed.ts
+npm install              # installs all three workspaces at once
+
+npm run dev              # all three concurrently (colour-tagged output)
+npm run dev:backend      # ts-node with nodemon (hot reload), port 5000
+npm run dev:crm          # next dev, port 3000
+npm run dev:student      # next dev, port 3001
+
+npm run build            # backend → crm → student, sequentially
+npm run build:backend    # tsc → backend/dist/
+npm run build:crm
+npm run build:student
+
+npm start                # all three production servers concurrently
+npm run start:backend    # node dist/index.js
+npm run start:crm
+npm run start:student
+
+npm run seed             # seed initial data via ts-node backend/src/seed.ts
+npm run typecheck        # tsc --noEmit across all three
+npm run clean            # remove node_modules and build outputs
 ```
 
-### CRM frontend
-```bash
-cd crm
-npm run dev       # next dev --port 3000
-npm run build
-npm start
-```
+The per-app scripts still exist in each workspace's `package.json`, so `cd crm && npm run dev`
+also works. The root scripts are just `npm run <script> -w <workspace>` wrappers.
 
-### Student portal
-```bash
-cd student
-npm run dev       # next dev --port 3001
-npm run build
-npm start --port 3001
-```
-
-There is no monorepo root with a unified dev command — run each service in a separate terminal.
+Both Next apps set `outputFileTracingRoot` to the repo root in `next.config.ts` — required
+because dependencies are hoisted above each app directory.
 
 ## Environment Setup
 

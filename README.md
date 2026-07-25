@@ -33,15 +33,34 @@ A full-stack study-abroad management platform for counselling agencies. Manages 
 
 ## Quick Start
 
-Each service runs independently in its own terminal.
+This is an npm workspaces monorepo — one install at the root covers all three services.
 
-### 1. Backend
+### 1. Install
 
 ```bash
-cd backend
-cp .env.example .env        # fill in JWT_SECRET and MONGODB_URI
-npm install
-npm run dev                 # starts on port 5000
+npm install                 # installs backend, crm and student together
+```
+
+### 2. Configure environment
+
+```bash
+cp backend/.env.example backend/.env              # fill in JWT_SECRET and MONGODB_URI
+cp crm/.env.local.example crm/.env.local
+cp student/.env.local.example student/.env.local
+```
+
+### 3. Run
+
+```bash
+npm run dev                 # all three at once, colour-tagged output
+```
+
+Or start them individually, each in its own terminal:
+
+```bash
+npm run dev:backend         # port 5000
+npm run dev:crm             # port 3000
+npm run dev:student         # port 3001
 ```
 
 Seed an initial super_admin:
@@ -49,22 +68,13 @@ Seed an initial super_admin:
 npm run seed
 ```
 
-### 2. CRM Dashboard
+### Other root commands
 
 ```bash
-cd crm
-cp .env.local.example .env.local
-npm install
-npm run dev                 # starts on port 3000
-```
-
-### 3. Student Portal
-
-```bash
-cd student
-cp .env.local.example .env.local
-npm install
-npm run dev                 # starts on port 3001
+npm run build               # build all three
+npm run typecheck           # tsc --noEmit across all three
+npm start                   # run all three production servers
+npm run clean               # remove node_modules and build outputs
 ```
 
 ---
