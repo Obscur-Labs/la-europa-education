@@ -132,6 +132,25 @@ links through that helper, never by concatenating the API base.
 Deleting a document destroys its Cloudinary assets, except any still referenced by a
 `Message` (chat attachments and documents can share one upload).
 
+### Developer Console (local only)
+`/dev` in the CRM is an unauthenticated console for local development: user/RBAC CRUD,
+password resets, one-click impersonation, the access matrix, and a read-only collection
+browser. It talks to `backend/src/routes/dev.ts` via `crm/src/lib/devApi.ts` (raw `fetch`,
+not the shared axios instance, which would attach a token and redirect on 401).
+
+It is gated four ways — leave every one of them in place:
+
+| Gate | Where |
+|---|---|
+| `NODE_ENV !== 'production'` **and** `ENABLE_DEV_ROUTES === 'true'` | mount check in `index.ts` |
+| same check re-run per request | `localhostOnly` in `routes/dev.ts` |
+| caller must be loopback (`127.0.0.1` / `::1`) | `localhostOnly` |
+| CRM page renders `notFound()` in production builds | `crm/src/app/dev/layout.tsx` |
+
+`ENABLE_DEV_ROUTES` must never be set on a deployed backend. Note that `authorize()` is used
+in only one route file — most guards are inline `req.user.role` checks — so the access matrix
+in `routes/dev.ts` is a hand-maintained mirror. Update it whenever you change a guard.
+
 ### CRM Frontend Structure
 - App Router with a `(crm)` route group for authenticated pages
 - Global providers in `app/layout.tsx`: `ThemeProvider` → `ToastProvider`

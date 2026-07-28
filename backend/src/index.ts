@@ -17,6 +17,7 @@ import paymentRoutes from "./routes/payments";
 import messageRoutes from "./routes/messages";
 import notificationRoutes from "./routes/notifications";
 import dashboardRoutes from "./routes/dashboard";
+import devRoutes, { isDevToolsEnabled } from "./routes/dev";
 import { setupSocket } from "./socket";
 import { uploadErrorHandler } from "./middleware/upload";
 import { isCloudinaryConfigured } from "./config/cloudinary";
@@ -74,6 +75,12 @@ app.use("/api/messages", messageRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
+// Unauthenticated developer console — never mounted in production, and the
+// router itself additionally rejects anything that is not loopback.
+if (isDevToolsEnabled()) {
+  app.use("/api/dev", devRoutes);
+}
+
 app.get("/api/health", (_req, res) =>
   res.json({
     status: "ok",
@@ -90,6 +97,9 @@ server.listen(PORT, () => {
   console.log(`StudyCRM backend running on port ${PORT}`);
   if (!isCloudinaryConfigured()) {
     console.warn("⚠  Cloudinary is not configured — file uploads will return 503. Set CLOUDINARY_* in .env");
+  }
+  if (isDevToolsEnabled()) {
+    console.warn("⚠  Unauthenticated dev routes are ENABLED at /api/dev (localhost only). Never do this in production.");
   }
 });
 
