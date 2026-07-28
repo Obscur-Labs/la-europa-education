@@ -6,6 +6,7 @@ import { MessageSkeleton } from '@/components/Skeleton';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from '@/context/ToastContext';
 import api from '@/lib/api';
+import { fileHref } from '@/lib/media';
 import { io, Socket } from 'socket.io-client';
 import type { Message, Student, DocRequestItem, FormAnswer } from '@/types';
 import { DocRequestCard, FormRequestCard, FormResponseCard, ReplyQuote, Ticks } from '@/components/chat/MessageCards';
@@ -49,7 +50,7 @@ function fmtListTime(iso?: string) {
 function FileContent({ msg, isMe }: { msg: Message; isMe: boolean }) {
   const ext  = msg.fileName?.split('.').pop()?.toLowerCase() ?? '';
   const isImg = ['jpg','jpeg','png','gif','webp','svg'].includes(ext);
-  const href  = `${API_BASE.replace('/api','')}${msg.fileUrl}`;
+  const href  = fileHref(msg.fileUrl);
 
   if (isImg) {
     return (

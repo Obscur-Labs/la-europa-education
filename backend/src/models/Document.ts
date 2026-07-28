@@ -4,8 +4,12 @@ export type DocType = 'passport' | 'marksheet_10' | 'marksheet_12' | 'ielts' | '
 export type DocStatus = 'uploaded' | 'under_review' | 'approved' | 'rejected';
 
 export interface IDocVersion {
+  /** Absolute Cloudinary URL (legacy records may hold a relative `/uploads/…` path) */
   fileUrl: string;
   fileName: string;
+  /** Cloudinary public id — absent on records created before the Cloudinary migration */
+  publicId?: string;
+  resourceType?: 'image' | 'video' | 'raw';
   uploadedAt: Date;
   uploadedBy: mongoose.Types.ObjectId;
 }
@@ -25,10 +29,12 @@ export interface IDocument extends MDocument {
 }
 
 const DocVersionSchema = new Schema<IDocVersion>({
-  fileUrl:    { type: String, required: true },
-  fileName:   { type: String, required: true },
-  uploadedAt: { type: Date, default: Date.now },
-  uploadedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  fileUrl:      { type: String, required: true },
+  fileName:     { type: String, required: true },
+  publicId:     { type: String },
+  resourceType: { type: String, enum: ['image', 'video', 'raw'] },
+  uploadedAt:   { type: Date, default: Date.now },
+  uploadedBy:   { type: Schema.Types.ObjectId, ref: 'User', required: true },
 }, { _id: false });
 
 const DocumentSchema = new Schema<IDocument>({

@@ -1,11 +1,11 @@
 import { Router, Response, NextFunction } from 'express';
-import path from 'path';
-import multer from 'multer';
 import mongoose from 'mongoose';
 import Message from '../models/Message';
 import Conversation from '../models/Conversation';
 import User from '../models/User';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { upload, requireCloudinary } from '../middleware/upload';
+import { uploadBuffer, mediaFolders } from '../config/cloudinary';
 import { getIo } from '../socket/emitter';
 import { isUserViewing } from '../socket';
 import { notify } from '../utils/notify';
@@ -22,13 +22,6 @@ router.use(authenticate, (req: AuthRequest, res: Response, next: NextFunction) =
   }
   next();
 });
-
-// ── Multer (chat file uploads) ───────────────────────────────────────────────
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, path.join(process.cwd(), 'uploads')),
-  filename:    (_req, file,  cb) => cb(null, `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`),
-});
-const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } }); // 10 MB
 
 // ── Conversations ────────────────────────────────────────────────────────────
 
@@ -155,19 +148,32 @@ router.post('/send', authenticate, async (req: AuthRequest, res: Response): Prom
  * Fields: file, conversationId, studentId? (required when student uploads so we
  *         also create a Document record for their profile)
  */
-router.post('/send-file', authenticate, upload.single('file'), async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/send-file', authenticate, requireCloudinary, upload.single('file'), async (req: AuthRequest, res: Response): Promise<void> => {
   if (!req.file) { res.status(400).json({ message: 'No file uploaded' }); return; }
 
   const { conversationId, studentId, voice, duration, replyTo } = req.body as Record<string, string>;
   if (!conversationId) { res.status(400).json({ message: 'conversationId is required' }); return; }
 
-  const convCheck = await Conversation.findById(conversationId).select('archived');
+  const convCheck = await Conversation.findById(conversationId).select('archived participants');
   if (!convCheck) { res.status(404).json({ message: 'Conversation not found' }); return; }
   if (convCheck.archived) { res.status(403).json({ message: 'This conversation is closed' }); return; }
+  if (!convCheck.participants.some(p => p.toString() === req.user!.id)) {
+    res.status(403).json({ message: 'Not a participant of this conversation' }); return;
+  }
 
-  const fileUrl  = `/uploads/${req.file.filename}`;
   const fileName = req.file.originalname;
   const isVoice  = voice === 'true';
+
+  let asset;
+  try {
+    asset = await uploadBuffer(
+      req.file,
+      isVoice ? mediaFolders.chatVoice(conversationId) : mediaFolders.chatFiles(conversationId),
+    );
+  } catch (err) {
+    res.status(502).json({ message: 'Upload to storage failed', error: err }); return;
+  }
+  const fileUrl = asset.url;
 
   let parsedReply: { messageId: string; senderName: string; preview: string } | undefined;
   if (replyTo) { try { parsedReply = JSON.parse(replyTo); } catch { /* ignore malformed reply payloads */ } }
@@ -181,6 +187,8 @@ router.post('/send-file', authenticate, upload.single('file'), async (req: AuthR
       type:       'file',
       fileUrl,
       fileName,
+      filePublicId:     asset.publicId,
+      fileResourceType: asset.resourceType,
       meta: isVoice ? { voice: true, duration: duration ? Number(duration) : undefined } : undefined,
       replyTo: parsedReply,
       readBy: [req.user!.id],
@@ -198,8 +206,10 @@ router.post('/send-file', authenticate, upload.single('file'), async (req: AuthR
       const version = {
         fileUrl,
         fileName,
-        uploadedAt: now,
-        uploadedBy: new mongoose.Types.ObjectId(req.user!.id),
+        publicId:     asset.publicId,
+        resourceType: asset.resourceType,
+        uploadedAt:   now,
+        uploadedBy:   new mongoose.Types.ObjectId(req.user!.id),
       };
       const existing = await DocumentModel.findOne({ studentId, type: 'other', label: fileName });
       if (existing) {
@@ -350,7 +360,9 @@ async function isParticipant(conversationId: mongoose.Types.ObjectId | string, u
 function sanitize(msg: InstanceType<typeof Message>): Record<string, unknown> {
   const obj = msg.toObject() as unknown as Record<string, unknown>;
   if (obj.deletedForEveryone) {
-    obj.text = ''; delete obj.fileUrl; delete obj.fileName;
+    obj.text = '';
+    delete obj.fileUrl; delete obj.fileName;
+    delete obj.filePublicId; delete obj.fileResourceType;
     delete obj.meta; delete obj.replyTo; obj.reactions = [];
   }
   return obj;

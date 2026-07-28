@@ -18,6 +18,8 @@ import messageRoutes from "./routes/messages";
 import notificationRoutes from "./routes/notifications";
 import dashboardRoutes from "./routes/dashboard";
 import { setupSocket } from "./socket";
+import { uploadErrorHandler } from "./middleware/upload";
+import { isCloudinaryConfigured } from "./config/cloudinary";
 
 dotenv.config();
 
@@ -46,12 +48,12 @@ app.use(
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// Ensure uploads dir exists
-const uploadsDir = path.join(process.cwd(), "uploads");
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-
-// Serve uploaded files
-app.use("/uploads", express.static(uploadsDir));
+// New uploads go to Cloudinary. This only keeps files that were written to
+// disk before that migration reachable, and is skipped when there are none.
+const legacyUploadsDir = path.join(process.cwd(), "uploads");
+if (fs.existsSync(legacyUploadsDir)) {
+  app.use("/uploads", express.static(legacyUploadsDir));
+}
 
 // Connect DB
 connectDB();
@@ -73,12 +75,22 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
 app.get("/api/health", (_req, res) =>
-  res.json({ status: "ok", timestamp: new Date().toISOString() }),
+  res.json({
+    status: "ok",
+    storage: isCloudinaryConfigured() ? "cloudinary" : "unconfigured",
+    timestamp: new Date().toISOString(),
+  }),
 );
 
+// Must come after the routes so multer's errors land here as JSON
+app.use(uploadErrorHandler);
+
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () =>
-  console.log(`StudyCRM backend running on port ${PORT}`),
-);
+server.listen(PORT, () => {
+  console.log(`StudyCRM backend running on port ${PORT}`);
+  if (!isCloudinaryConfigured()) {
+    console.warn("⚠  Cloudinary is not configured — file uploads will return 503. Set CLOUDINARY_* in .env");
+  }
+});
 
 export { io };

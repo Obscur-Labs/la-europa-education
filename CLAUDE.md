@@ -58,7 +58,14 @@ JWT_SECRET=...
 JWT_EXPIRES_IN=7d
 CLIENT_CRM_URL=http://localhost:3000
 CLIENT_STUDENT_URL=http://localhost:3001
+CLOUDINARY_CLOUD_NAME=...
+CLOUDINARY_API_KEY=...
+CLOUDINARY_API_SECRET=...
+CLOUDINARY_FOLDER=la-europa-docs
 ```
+
+Uploads return `503` until the `CLOUDINARY_*` values are filled in; `GET /api/health`
+reports `storage: "cloudinary" | "unconfigured"`.
 
 **crm/.env.local** / **student/.env.local**:
 ```
@@ -98,6 +105,32 @@ The `StudentStage` enum drives the entire pipeline:
 
 ### Real-time (Socket.io)
 The backend creates an `http.Server` wrapping Express and attaches `socket.io`. CORS is configured to allow both frontend origins. The socket setup lives in `backend/src/socket.ts`. Both frontends connect via `NEXT_PUBLIC_SOCKET_URL`. The exported `io` instance from `backend/src/index.ts` is used inside routes to emit events.
+
+### File Storage (Cloudinary)
+Every user-uploaded file goes to Cloudinary — nothing is written to the local disk.
+`backend/src/middleware/upload.ts` exports a memory-storage `multer` instance plus a
+`requireCloudinary` guard (503 when credentials are missing); `backend/src/config/cloudinary.ts`
+streams the buffer up and owns the folder vocabulary:
+
+```
+<CLOUDINARY_FOLDER>/                     (default: la-europa-docs)
+  students/<studentId>/documents/        ← POST /api/documents/upload
+  chat/<conversationId>/files/           ← POST /api/messages/send-file
+  chat/<conversationId>/voice/           ← the same route with voice=true
+```
+
+Images upload as `image`, audio/video as `video`, everything else (PDF, DOCX …) as `raw`
+so it is delivered byte-for-byte and is unaffected by Cloudinary's PDF delivery restrictions.
+
+`fileUrl` fields now hold an absolute `https://res.cloudinary.com/…` URL, alongside a
+`publicId`/`resourceType` pair (`filePublicId`/`fileResourceType` on `Message`) used for
+deletion. Both are optional — records predating the migration still hold a relative
+`/uploads/…` path, which the backend keeps serving statically when that folder exists and
+which the frontends resolve through `fileHref()` in `src/lib/media.ts`. Always render file
+links through that helper, never by concatenating the API base.
+
+Deleting a document destroys its Cloudinary assets, except any still referenced by a
+`Message` (chat attachments and documents can share one upload).
 
 ### CRM Frontend Structure
 - App Router with a `(crm)` route group for authenticated pages

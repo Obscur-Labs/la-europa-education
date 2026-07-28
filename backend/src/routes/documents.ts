@@ -1,23 +1,20 @@
 import { Router, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
-import multer from 'multer';
+import https from 'https';
+import { IncomingMessage } from 'http';
 import mongoose from 'mongoose';
 import { ZipArchive } from 'archiver';
-import DocumentModel, { DocType } from '../models/Document';
+import DocumentModel, { DocType, IDocVersion } from '../models/Document';
 import DocumentRequest from '../models/DocumentRequest';
 import Student from '../models/Student';
 import Message from '../models/Message';
 import Conversation from '../models/Conversation';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { upload, requireCloudinary } from '../middleware/upload';
+import { uploadBuffer, destroyAsset, mediaFolders } from '../config/cloudinary';
 import { getIo } from '../socket/emitter';
 import { notify } from '../utils/notify';
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, path.join(process.cwd(), 'uploads')),
-  filename:    (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`),
-});
-const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 
 const router = Router();
 
@@ -165,6 +162,22 @@ router.put('/requests/:id/cancel', authenticate, async (req: AuthRequest, res: R
 
 // ── Download all documents as ZIP ────────────────────────────────────────────
 
+/** Open a readable stream over a remote (Cloudinary) asset. */
+function fetchRemote(url: string, redirectsLeft = 3): Promise<IncomingMessage> {
+  return new Promise((resolve, reject) => {
+    https.get(url, res => {
+      const status = res.statusCode ?? 0;
+      if (status >= 300 && status < 400 && res.headers.location && redirectsLeft > 0) {
+        res.resume();
+        fetchRemote(res.headers.location, redirectsLeft - 1).then(resolve, reject);
+        return;
+      }
+      if (status !== 200) { res.resume(); reject(new Error(`Asset fetch failed (${status})`)); return; }
+      resolve(res);
+    }).on('error', reject);
+  });
+}
+
 /** GET /api/documents/download-all/:studentId — staff only, streams a ZIP of current versions */
 router.get('/download-all/:studentId', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   if (!isStaff(req.user?.role)) { res.status(403).json({ message: 'Forbidden' }); return; }
@@ -186,14 +199,21 @@ router.get('/download-all/:studentId', authenticate, async (req: AuthRequest, re
 
     const seen = new Set<string>();
     for (const doc of withFiles) {
-      const diskPath = path.join(process.cwd(), 'uploads', path.basename(doc.currentVersion.fileUrl));
-      if (!fs.existsSync(diskPath)) continue;
+      const { fileUrl, fileName } = doc.currentVersion;
       const base = doc.label || doc.type;
-      let entry = `${base.replace(/[^\w.-]+/g, '_')}__${doc.currentVersion.fileName}`;
+      let entry = `${base.replace(/[^\w.-]+/g, '_')}__${fileName}`;
       let n = 1;
-      while (seen.has(entry)) entry = `${base}_${n++}__${doc.currentVersion.fileName}`;
+      while (seen.has(entry)) entry = `${base}_${n++}__${fileName}`;
       seen.add(entry);
-      archive.file(diskPath, { name: entry });
+
+      if (/^https?:\/\//i.test(fileUrl)) {
+        // A single unreachable asset must not abort the whole archive
+        try { archive.append(await fetchRemote(fileUrl), { name: entry }); } catch { continue; }
+      } else {
+        // Legacy record still pointing at the old local uploads folder
+        const diskPath = path.join(process.cwd(), 'uploads', path.basename(fileUrl));
+        if (fs.existsSync(diskPath)) archive.file(diskPath, { name: entry });
+      }
     }
     await archive.finalize();
   } catch (err) {
@@ -202,6 +222,25 @@ router.get('/download-all/:studentId', authenticate, async (req: AuthRequest, re
 });
 
 // ── Documents CRUD ───────────────────────────────────────────────────────────
+
+/**
+ * Drop the stored assets behind a deleted document. Chat attachments and
+ * documents can point at the same upload, so anything a Message still links to
+ * is left alone.
+ */
+async function destroyUnreferencedVersions(versions: IDocVersion[]): Promise<void> {
+  const publicIds = [...new Set(versions.map(v => v.publicId).filter((id): id is string => !!id))];
+  if (publicIds.length === 0) return;
+
+  const stillLinked = await Message.distinct('filePublicId', { filePublicId: { $in: publicIds } });
+  const linked = new Set<string>(stillLinked);
+
+  await Promise.all(
+    versions
+      .filter(v => v.publicId && !linked.has(v.publicId))
+      .map(v => destroyAsset(v.publicId, v.resourceType)),
+  );
+}
 
 router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
@@ -234,7 +273,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
 
 // POST /api/documents/upload — multipart file upload (student portal + CRM)
 // Optional field `requestId` fulfils a pending DocumentRequest.
-router.post('/upload', authenticate, async (req: AuthRequest, res: Response, next) => {
+router.post('/upload', authenticate, requireCloudinary, async (req: AuthRequest, res: Response, next) => {
   if (req.user?.role === 'university') {
     res.status(403).json({ message: 'University users have read-only document access' }); return;
   }
@@ -243,11 +282,29 @@ router.post('/upload', authenticate, async (req: AuthRequest, res: Response, nex
   if (!req.file) { res.status(400).json({ message: 'No file uploaded' }); return; }
   const { studentId, type, label, requestId, conversationId } = req.body;
   if (!studentId || !type) { res.status(400).json({ message: 'studentId and type are required' }); return; }
+  if (!mongoose.Types.ObjectId.isValid(studentId)) {
+    res.status(400).json({ message: 'Invalid studentId' }); return;
+  }
 
-  const fileUrl  = `/uploads/${req.file.filename}`;
   const fileName = req.file.originalname;
   const now      = new Date();
-  const version  = { fileUrl, fileName, uploadedAt: now, uploadedBy: new mongoose.Types.ObjectId(req.user!.id) };
+
+  let asset;
+  try {
+    asset = await uploadBuffer(req.file, mediaFolders.studentDocuments(studentId));
+  } catch (err) {
+    res.status(502).json({ message: 'Upload to storage failed', error: err }); return;
+  }
+
+  const fileUrl = asset.url;
+  const version: IDocVersion = {
+    fileUrl,
+    fileName,
+    publicId:     asset.publicId,
+    resourceType: asset.resourceType,
+    uploadedAt:   now,
+    uploadedBy:   new mongoose.Types.ObjectId(req.user!.id),
+  };
 
   try {
     // Check if a document of this type already exists for the student
@@ -310,6 +367,8 @@ router.post('/upload', authenticate, async (req: AuthRequest, res: Response, nex
         type: 'file',
         fileUrl,
         fileName,
+        filePublicId:     asset.publicId,
+        fileResourceType: asset.resourceType,
         readBy: [req.user!.id],
       });
       await Conversation.findByIdAndUpdate(conversationId, {
@@ -380,7 +439,8 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
     res.status(403).json({ message: 'University users have read-only document access' }); return;
   }
   try {
-    await DocumentModel.findByIdAndDelete(req.params.id);
+    const doc = await DocumentModel.findByIdAndDelete(req.params.id);
+    if (doc) await destroyUnreferencedVersions(doc.versions);
     res.json({ message: 'Document deleted' });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err });

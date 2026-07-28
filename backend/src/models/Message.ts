@@ -20,8 +20,12 @@ export interface IMessage extends Document {
   senderName: string;
   type: MessageType;
   text?: string;
+  /** Absolute Cloudinary URL (legacy records may hold a relative `/uploads/…` path) */
   fileUrl?: string;
   fileName?: string;
+  /** Cloudinary public id — absent on records created before the Cloudinary migration */
+  filePublicId?: string;
+  fileResourceType?: 'image' | 'video' | 'raw';
   /**
    * Type-specific payload:
    * - document_request: { items: [{ requestId, type, label?, note?, status }] }
@@ -55,6 +59,8 @@ const MessageSchema = new Schema<IMessage>({
   text:           String,
   fileUrl:        String,
   fileName:       String,
+  filePublicId:   String,
+  fileResourceType: { type: String, enum: ['image', 'video', 'raw'] },
   meta:           { type: Schema.Types.Mixed },
   replyTo:        { type: ReplyToSchema },
   reactions:      { type: [{ userId: { type: Schema.Types.ObjectId, ref: 'User', required: true }, emoji: { type: String, required: true }, _id: false }], default: [] },

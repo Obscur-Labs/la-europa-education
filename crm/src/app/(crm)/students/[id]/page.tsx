@@ -2,6 +2,7 @@
 import { useEffect, useState, use } from 'react';
 import Link from 'next/link';
 import api from '@/lib/api';
+import { fileHref } from '@/lib/media';
 import { StageTracker } from '@/components/StageTracker';
 import { useToast } from '@/context/ToastContext';
 import { useAuthStore } from '@/stores/authStore';
@@ -611,7 +612,7 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
                     <p className="text-xs text-t3 mb-3 truncate">{doc.currentVersion?.fileName}</p>
                     <div className="flex items-center gap-2">
                       <a
-                        href={doc.currentVersion?.fileUrl}
+                        href={fileHref(doc.currentVersion?.fileUrl)}
                         target="_blank"
                         rel="noreferrer"
                         className="text-xs text-accent hover:underline"

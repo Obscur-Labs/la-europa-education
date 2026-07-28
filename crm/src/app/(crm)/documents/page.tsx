@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
+import { fileHref } from '@/lib/media';
 import { SkeletonTable } from '@/components/Skeleton';
 import { useToast } from '@/context/ToastContext';
 import type { Document as Doc, DocStatus } from '@/types';
@@ -117,7 +118,7 @@ export default function DocumentsPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {doc.currentVersion?.fileUrl && (
-                          <a href={doc.currentVersion.fileUrl} target="_blank" rel="noreferrer" className="text-xs text-accent hover:underline">
+                          <a href={fileHref(doc.currentVersion.fileUrl)} target="_blank" rel="noreferrer" className="text-xs text-accent hover:underline">
                             View
                           </a>
                         )}
@@ -151,7 +152,7 @@ export default function DocumentsPage() {
             <p className="text-sm text-t2 mb-4">{reviewDoc.type.replace(/_/g,' ')} — {reviewDoc.currentVersion?.fileName}</p>
             {reviewDoc.currentVersion?.fileUrl && (
               <a
-                href={reviewDoc.currentVersion.fileUrl}
+                href={fileHref(reviewDoc.currentVersion.fileUrl)}
                 target="_blank"
                 rel="noreferrer"
                 className="block w-full text-center py-3 mb-4 rounded-xl border border-line text-sm text-accent hover:bg-muted transition-colors"
