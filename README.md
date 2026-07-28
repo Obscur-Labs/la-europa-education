@@ -2,6 +2,11 @@
 
 A full-stack study-abroad management platform for counselling agencies. Manages the complete student lifecycle — from lead capture through visa approval — with a staff CRM and a student self-service portal...
 
+> **Documentation lives in [`vault/`](vault/Home.md)** — an Obsidian vault of
+> interlinked notes covering architecture, data models, domain workflows and
+> deployment. Open the `vault/` folder as a vault in Obsidian, or just start at
+> [`vault/Home.md`](vault/Home.md) on GitHub.
+
 ---
 
 ## What It Does

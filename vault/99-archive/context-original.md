@@ -1,3 +1,30 @@
+---
+title: Technical Context (original)
+aliases: [context.md]
+tags: [archive]
+type: note
+created: 2026-07-17
+updated: 2026-07-28
+status: superseded
+summary: The original monolithic context.md, kept for reference — its content now lives in atomic notes.
+---
+
+> [!warning] Superseded — do not rely on this
+> This is the original root-level `context.md`, moved here when the vault was
+> built on 2026-07-28. Its content has been split into atomic notes; start from
+> [[Home]] instead.
+>
+> **Known inaccuracies in this document:**
+> - Says "Roles (11)" then lists 12. There are **12** — see [[roles-and-authorization]].
+> - The `User` fields are stale: it lists `lastLogin`, which doesn't exist, and
+>   omits `phone`, `universityName` and `lastSeenAt`. See [[model-user]].
+> - The Development Commands section claims "There is no unified monorepo dev
+>   command." That is no longer true — the repo moved to npm workspaces on
+>   2026-07-27. See [[development-commands]] and [[monorepo-workspaces]].
+>
+> Kept because the prose is denser than the split notes in places. Safe to delete
+> once you're confident nothing was lost.
+
 # StudyCRM — Deep Technical Context
 
 ## Project Overview

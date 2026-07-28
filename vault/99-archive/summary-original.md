@@ -1,3 +1,23 @@
+---
+title: Project Summary (original)
+aliases: [summary.md]
+tags: [archive]
+type: note
+created: 2026-07-17
+updated: 2026-07-28
+status: superseded
+summary: The original root-level summary.md, superseded by the overview note.
+---
+
+> [!warning] Superseded — do not rely on this
+> This is the original root-level `summary.md`, moved here when the vault was
+> built on 2026-07-28. Its content now lives in [[studycrm-overview]].
+>
+> **Known inaccuracy:** the "11 roles" figure is wrong — there are **12**.
+> See [[roles-and-authorization]].
+>
+> Safe to delete once you're confident nothing was lost.
+
 # StudyCRM — Project Summary
 
 ## What It Is
